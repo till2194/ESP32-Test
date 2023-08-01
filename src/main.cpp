@@ -5,19 +5,10 @@
 
 #include "config.h"
 
-// the following variables are unsigned longs because the time, measured in
-// milliseconds, will quickly become a bigger number than can be stored in an int.
-unsigned long lastTime = 0;
-// Timer set to 10 minutes (600000)
-// unsigned long timerDelay = 600000;
-// Set timer to 5 seconds (5000)
-unsigned long timerDelay = 5000;
-
 // Weather API
 const String openweatherServer = "https://api.openweathermap.org/data/3.0/onecall";
 const String serverPath = openweatherServer + "?lat=" + OPENWEATHER_LAT + "&lon=" + OPENWEATHER_LON + "&appid=" + OPENWEATHER_API_KEY;
-
-String weatherData;
+JSONVar weatherData;
 
 void initWiFi() {
   WiFi.mode(WIFI_STA);
@@ -33,19 +24,13 @@ void initWiFi() {
   Serial.println(WiFi.localIP());
 }
 
-String httpGETRequest() {
+JSONVar httpGETRequest(String server) {
   HTTPClient http;
-
-  // Your Domain name with URL path or IP address with path
-  http.begin(serverPath.c_str());
-
-  // If you need Node-RED/server authentication, insert user and password below
-  // http.setAuthorization("REPLACE_WITH_SERVER_USERNAME", "REPLACE_WITH_SERVER_PASSWORD");
-
-  // Send HTTP POST request
+  http.begin(server.c_str());
   int httpResponseCode = http.GET();
 
   String payload = "{}";
+  JSONVar data;
 
   if (httpResponseCode > 0) {
     Serial.print("HTTP Response code: ");
@@ -58,42 +43,23 @@ String httpGETRequest() {
   // Free resources
   http.end();
 
-  return payload;
-}
-
-void weatherUpdate() {
-  // Send an HTTP POST request every 10 minutes
-  if ((millis() - lastTime) > timerDelay) {
-    // Check WiFi connection status
-    if (WiFi.status() == WL_CONNECTED) {
-      weatherData = httpGETRequest();
-      Serial.println(weatherData);
-
-      JSONVar myObject = JSON.parse(weatherData);
-
-      // JSON.typeof(jsonVar) can be used to get the type of the var
-      if (JSON.typeof(myObject) == "undefined") {
-        Serial.println("Parsing input failed!");
-        return;
-      }
-
-      Serial.print("JSON object = ");
-      Serial.println(myObject);
-
-      // myObject.keys() can be used to get an array of all the keys in the object
-      JSONVar keys = myObject.keys();
-
-      for (int i = 0; i < keys.length(); i++) {
-        JSONVar value = myObject[keys[i]];
-        Serial.print(keys[i]);
-        Serial.print(" = ");
-        Serial.println(value);
-      }
-    } else {
-      Serial.println("WiFi Disconnected");
-    }
-    lastTime = millis();
+  data = JSON.parse(payload);
+  if (JSON.typeof(data) == "undefined") {
+    Serial.println("Parsing input failed!");
+    return data;
   }
+
+  // myObject.keys() can be used to get an array of all the keys in the object
+  JSONVar keys = data.keys();
+
+  for (int i = 0; i < keys.length(); i++) {
+    JSONVar value = data[keys[i]];
+    Serial.print(keys[i]);
+    Serial.print(" = ");
+    Serial.println(value);
+  }
+
+  return data;
 }
 
 void setup() {
@@ -101,10 +67,14 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  // Set WiFi to station mode
+  // Connect WiFi
   initWiFi();
 }
 
 void loop() {
-  weatherUpdate();
+  // Send an HTTP POST request every x seconds/minutes
+  if ((millis() - TIMESTAMP_WEATHER) > DELAY_WEATHER) {
+    weatherData = httpGETRequest(serverPath);
+    TIMESTAMP_WEATHER = millis();
+  }
 }
